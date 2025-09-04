@@ -32,6 +32,15 @@ jobs:
           gh label create "inbox-item" --description "Generated from inbox file" --color "7057ff" || true
           gh label create "auto-generated" --description "Automatically generated" --color "fbca04" || true
 
+      # Check if Copilot is available in the repository
+      - name: Check Copilot availability
+        run: |
+          echo "🔍 Checking GitHub Copilot availability..."
+          # Check if repository has Copilot enabled (this will help with debugging)
+          echo "Repository: ${{ github.repository }}"
+          echo "Workflow triggered by: ${{ github.event_name }}"
+          echo "GitHub actor: ${{ github.actor }}"
+
       # Find changed files in inbox/
       - name: Detect inbox changes
         id: changes
@@ -64,92 +73,101 @@ jobs:
 
             # Create comprehensive prompt for Copilot
             {
-              echo "@copilot"
+              echo "## 🤖 GitHub Copilot Agent Task"
               echo ""
-              echo "## Assignment: Analyze Inbox File and Take Action"
+              echo "### Assignment: Analyze Inbox File and Create Issues/PRs"
               echo ""
-              echo "You are tasked with analyzing the content below and automatically creating appropriate Issues and Pull Requests based on what you find."
+              echo "**File to Process:** \`$filepath\`"
+              echo "**Repository:** ${{ github.repository }}"
+              echo "**Commit:** ${{ github.sha }}"
               echo ""
-              echo "### Your Instructions:"
+              echo "### Instructions for Copilot Agent:"
               echo ""
-              echo "**1. Content Analysis:**"
-              echo "- Read and understand the file content completely"
-              echo "- Identify if it contains: bug reports, feature requests, code snippets, documentation, or configuration"
+              echo "Please analyze the content below and automatically create appropriate GitHub Issues and Pull Requests:"
               echo ""
-              echo "**2. Issue Creation:**"
-              echo "- For bugs/problems: Create detailed bug report issues with reproduction steps"
-              echo "- For feature requests: Create enhancement issues with clear requirements and acceptance criteria"
-              echo "- For questions/discussions: Create discussion issues"
+              echo "#### 1. Content Analysis"
+              echo "- Examine the file content thoroughly"
+              echo "- Identify: bug reports, feature requests, code snippets, documentation, configuration files"
               echo ""
-              echo "**3. Pull Request Creation:**"
-              echo "- For code/config/docs that should be integrated: Create draft PRs implementing the changes"
-              echo "- Include tests and documentation where appropriate"
-              echo "- Use descriptive commit messages and PR descriptions"
+              echo "#### 2. Create Issues For:"
+              echo "- **Bug Reports:** Create detailed issues with reproduction steps, expected vs actual behavior"
+              echo "- **Feature Requests:** Create enhancement issues with clear requirements and acceptance criteria"
+              echo "- **Questions/Discussions:** Create discussion issues for clarification needs"
               echo ""
-              echo "**4. Assignment Requirements:**"
-              echo "- Create issues and PRs as needed based on the content"
-              echo "- Reference this coordination issue in all created items"
-              echo "- Use appropriate labels: bug, enhancement, documentation, question, etc."
-              echo "- Follow repository best practices"
+              echo "#### 3. Create Pull Requests For:"
+              echo "- **Code/Config/Docs:** Create draft PRs implementing the suggested changes"
+              echo "- **Include:** Appropriate tests, documentation updates, clear commit messages"
+              echo "- **Branch naming:** Use pattern 'copilot/$(echo ${{ github.sha }} | cut -c1-8)-$(echo $filename | tr -cs \"[:alnum:]\" \"-\")'"
               echo ""
-              echo "**5. Branch Naming:**"
-              echo "Use pattern: copilot/${{ github.sha }}-$(echo '$filename' | tr -cs '[:alnum:]' '-')"
+              echo "#### 4. Requirements:"
+              echo "- Reference this coordination issue (#ISSUE_NUMBER) in all created items"
+              echo "- Use appropriate labels: \`bug\`, \`enhancement\`, \`documentation\`, \`question\`"
+              echo "- Follow repository best practices and existing patterns"
+              echo "- Add detailed descriptions and context to all created items"
               echo ""
               echo "---"
               echo ""
-              echo "### Source File Details:"
-              echo "- **File:** \`$filepath\`"
-              echo "- **Repository:** ${{ github.repository }}"
-              echo "- **Commit:** ${{ github.sha }}"
-              echo "- **Triggered by:** Push to inbox folder"
+              echo "### File Content to Analyze:"
               echo ""
-              echo "### File Content:"
               echo '```'
               cat /tmp/content.txt
               echo '```'
               echo ""
-              echo "**Next Steps:** Please analyze this content and create appropriate Issues/PRs as outlined above."
+              echo "### Next Steps:"
+              echo "1. Respond with 👀 to acknowledge this task"
+              echo "2. Analyze the content and create appropriate Issues/PRs"
+              echo "3. Comment back here with links to created items"
+              echo ""
+              echo "**Ready for processing!** 🚀"
             } > /tmp/task.md
 
-            # Create coordination issue for Copilot (without assignee to avoid errors)
+            # Create coordination issue for Copilot Agent
             issue_url=$(gh issue create \
-              --title "@copilot: Process inbox file - $filename" \
+              --title "🤖 Copilot Agent: Process $filename" \
               --body-file /tmp/task.md \
               --label copilot-task,inbox-item,auto-generated)
 
             echo "✅ Created Copilot coordination issue: $issue_url"
 
-            # Add follow-up comment to trigger Copilot
+            # Extract issue number for follow-up actions
             issue_num=$(echo "$issue_url" | grep -o '[0-9]*$')
+            
             if [ -n "$issue_num" ]; then
-              echo "@copilot Please begin processing this inbox file and create any necessary Issues/PRs as described above." | \
+              # Add multiple trigger approaches to ensure Copilot sees the task
+              echo "🤖 @copilot please analyze and process this inbox file as described above." | \
                 gh issue comment "$issue_num" --body-file -
+              
+              # Also try alternative mentions that might trigger the agent
+              echo "/copilot analyze" | gh issue comment "$issue_num" --body-file - || true
+              echo "@github-copilot[bot] please process this file" | gh issue comment "$issue_num" --body-file - || true
+              
+              echo "📌 Added trigger comments to issue #$issue_num"
             fi
 
           done < changed_files.txt
 
-  # Auto-assign to new issues created (try to assign, but don't fail if user doesn't exist)
+  # Try to trigger Copilot on new issues
   auto_assign_issues:
     if: github.event_name == 'issues' && github.event.action == 'opened'
     runs-on: ubuntu-latest
     steps:
-      - name: Try to auto-assign to new issues
+      - name: Trigger Copilot on new issues
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Issue #${{ github.event.issue.number }} was created"
-          echo "@copilot Please review this new issue." | \
+          echo "📝 New issue #${{ github.event.issue.number }} was created"
+          echo "🤖 @copilot please review this new issue and provide assistance if needed." | \
             gh issue comment "${{ github.event.issue.number }}" --body-file - || true
 
-  # Auto-assign to new PRs created (try to assign, but don't fail if user doesn't exist)
+  # Try to trigger Copilot on new PRs
   auto_assign_prs:
     if: github.event_name == 'pull_request' && github.event.action == 'opened'
     runs-on: ubuntu-latest
     steps:
-      - name: Try to auto-assign to new PRs
+      - name: Trigger Copilot on new PRs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "PR #${{ github.event.pull_request.number }} was created"
-          echo "@copilot Please review this new pull request." | \
+          echo "🔀 New PR #${{ github.event.pull_request.number }} was created"
+          echo "🤖 @copilot please review this new pull request." | \
             gh issue comment "${{ github.event.pull_request.number }}" --body-file - || true
