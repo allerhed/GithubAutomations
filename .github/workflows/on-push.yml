@@ -64,7 +64,7 @@ jobs:
 
             # Create comprehensive prompt for Copilot
             {
-              echo "@copilot-swe-agent"
+              echo "@copilot"
               echo ""
               echo "## Assignment: Analyze Inbox File and Take Action"
               echo ""
@@ -87,7 +87,7 @@ jobs:
               echo "- Use descriptive commit messages and PR descriptions"
               echo ""
               echo "**4. Assignment Requirements:**"
-              echo "- Assign yourself (@copilot-swe-agent) to EVERY issue and PR you create"
+              echo "- Create issues and PRs as needed based on the content"
               echo "- Reference this coordination issue in all created items"
               echo "- Use appropriate labels: bug, enhancement, documentation, question, etc."
               echo "- Follow repository best practices"
@@ -111,42 +111,45 @@ jobs:
               echo "**Next Steps:** Please analyze this content and create appropriate Issues/PRs as outlined above."
             } > /tmp/task.md
 
-            # Create coordination issue for Copilot
+            # Create coordination issue for Copilot (without assignee to avoid errors)
             issue_url=$(gh issue create \
-              --title "@copilot-swe-agent: Process inbox file - $filename" \
+              --title "@copilot: Process inbox file - $filename" \
               --body-file /tmp/task.md \
-              --label copilot-task,inbox-item,auto-generated \
-              --assignee copilot-swe-agent)
+              --label copilot-task,inbox-item,auto-generated)
 
             echo "✅ Created Copilot coordination issue: $issue_url"
 
-            # Add follow-up comment to ensure visibility
+            # Add follow-up comment to trigger Copilot
             issue_num=$(echo "$issue_url" | grep -o '[0-9]*$')
             if [ -n "$issue_num" ]; then
-              echo "📋 @copilot-swe-agent Please begin processing this inbox file and create any necessary Issues/PRs as described above." | \
+              echo "@copilot Please begin processing this inbox file and create any necessary Issues/PRs as described above." | \
                 gh issue comment "$issue_num" --body-file -
             fi
 
           done < changed_files.txt
 
-  # Ensure Copilot is assigned to any new issues created
+  # Auto-assign to new issues created (try to assign, but don't fail if user doesn't exist)
   auto_assign_issues:
     if: github.event_name == 'issues' && github.event.action == 'opened'
     runs-on: ubuntu-latest
     steps:
-      - name: Auto-assign Copilot to new issues
+      - name: Try to auto-assign to new issues
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh issue edit "${{ github.event.issue.number }}" --add-assignee copilot-swe-agent || true
+          echo "Issue #${{ github.event.issue.number }} was created"
+          echo "@copilot Please review this new issue." | \
+            gh issue comment "${{ github.event.issue.number }}" --body-file - || true
 
-  # Ensure Copilot is assigned to any new PRs created  
+  # Auto-assign to new PRs created (try to assign, but don't fail if user doesn't exist)
   auto_assign_prs:
     if: github.event_name == 'pull_request' && github.event.action == 'opened'
     runs-on: ubuntu-latest
     steps:
-      - name: Auto-assign Copilot to new PRs
+      - name: Try to auto-assign to new PRs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh issue edit "${{ github.event.pull_request.number }}" --add-assignee copilot-swe-agent || true
+          echo "PR #${{ github.event.pull_request.number }} was created"
+          echo "@copilot Please review this new pull request." | \
+            gh issue comment "${{ github.event.pull_request.number }}" --body-file - || true
