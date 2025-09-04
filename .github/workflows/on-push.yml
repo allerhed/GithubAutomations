@@ -1,0 +1,104 @@
+name: Inbox → Copilot triage
+
+on:
+  push:
+    paths: ["inbox/**"]
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  intake:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Find files added in this push under inbox/
+      - name: List newly-added inbox files
+        id: diff
+        run: |
+          git fetch --depth=1 origin "${{ github.event.before }}" || true
+          git diff --name-only --diff-filter=A "${{ github.event.before }}" "${{ github.sha }}" -- 'inbox/**' > added.txt
+          echo "count=$(wc -l < added.txt)" >> "$GITHUB_OUTPUT"
+
+      # Create a Copilot task Issue per new file, embedding the file body + strict instructions
+      - name: Create Copilot task issues
+        if: steps.diff.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            title="Copilot: Analyze and act on $(basename "$f")"
+
+            # Read file content safely; truncate very large files to avoid hitting limits
+            if [ "$(wc -c < "$f")" -gt 950000 ]; then
+              head -c 950000 "$f" > /tmp/file_body.txt
+              echo -e "\n\n[NOTE: truncated for length]" >> /tmp/file_body.txt
+            else
+              cp "$f" /tmp/file_body.txt
+            fi
+
+            # Build the prompt body
+            {
+              echo "## Task"
+              echo "You are \`copilot-swe-agent\`. Analyze the file content below and take actions:"
+              echo "- If it describes bugs or feature requests: create one or more Issues with clear titles, summaries, acceptance criteria, and TODO checklists."
+              echo "- If it is code/config/docs that should be integrated: open a **draft PR** implementing the change, with tests and documentation as needed."
+              echo "- Reference this task issue in everything you create (Issues/PRs) and link back."
+              echo "- Apply labels based on content (e.g., \`bug\`, \`enhancement\`, \`documentation\`)."
+              echo "- Follow repo conventions and CONTRIBUTING.md."
+              echo "- **Assign \`copilot-swe-agent\` to every Issue and PR you create.**"
+              echo "- Use branch naming \`copilot/${GITHUB_SHA::7}-$(basename "$f" | tr -cs '[:alnum:]' -)\` for PRs."
+              echo
+              echo "## Source file"
+              echo "Path: \`$f\`"
+              echo
+              echo '```'
+              cat /tmp/file_body.txt
+              echo
+              echo '```'
+              echo
+              echo "## Notes"
+              echo "- If information is missing, proceed with best effort and leave questions as PR review comments."
+              echo "- Keep PRs small and incremental where possible."
+            } > /tmp/body.md
+
+            num=$(gh issue create \
+              --title "$title" \
+              --body-file /tmp/body.md \
+              --label from-file,automation,copilot \
+              --assignee copilot-swe-agent \
+              --json number -q .number)
+
+            echo "Opened task issue #$num for $f"
+          done < added.txt
+
+  # Auto-assign copilot-swe-agent to any newly opened Issue (including those Copilot creates)
+  auto_assign_issues:
+    if: github.event_name == 'issues' && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign copilot-swe-agent to new Issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue edit "${{ github.event.issue.number }}" --add-assignee copilot-swe-agent || true
+
+  # Auto-assign copilot-swe-agent to any newly opened PR (PRs are Issues under the hood)
+  auto_assign_prs:
+    if: github.event_name == 'pull_request' && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign copilot-swe-agent to new PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue edit "${{ github.event.pull_request.number }}" --add-assignee copilot-swe-agent || true
