@@ -170,12 +170,15 @@ jobs:
               # Extract feature content
               awk '/## 1\) Feature:/,/^---$/{if(!/^---$/) print}' "$filepath" > /tmp/feature.md
               
-              # Create feature issue
-              feature_issue=$(gh issue create \
+            # Create feature issue
+            feature_issue=$(gh issue create \
+              --title "✨ $feature_title" \
+              --body-file /tmp/feature.md \
+              --label enhancement,backend,inbox-item 2>/dev/null || \
+              gh issue create \
                 --title "✨ $feature_title" \
                 --body-file /tmp/feature.md \
-                --label enhancement,backend,inbox-item \
-                --assignee copilot-swe-agent || true)
+                --label enhancement,backend,inbox-item)
               
               echo "✅ Created feature issue: $feature_issue"
               
@@ -184,6 +187,8 @@ jobs:
               if [ -n "$feature_num" ]; then
                 echo "🤖 @copilot please implement this feature request. Break it down into smaller tasks and create a plan." | \
                   gh issue comment "$feature_num" --body-file - || true
+                # Try to assign copilot-swe-agent if it exists
+                gh issue edit "$feature_num" --add-assignee copilot-swe-agent 2>/dev/null || echo "Note: copilot-swe-agent not available for assignment"
               fi
             fi
 
@@ -194,12 +199,15 @@ jobs:
               # Extract bug content
               awk '/## 2\) Bug:/,/^---$/{if(!/^---$/) print}' "$filepath" > /tmp/bug.md
               
-              # Create bug issue
-              bug_issue=$(gh issue create \
+            # Create bug issue
+            bug_issue=$(gh issue create \
+              --title "🐛 $bug_title" \
+              --body-file /tmp/bug.md \
+              --label bug,payments,inbox-item 2>/dev/null || \
+              gh issue create \
                 --title "🐛 $bug_title" \
                 --body-file /tmp/bug.md \
-                --label bug,payments,inbox-item \
-                --assignee copilot-swe-agent || true)
+                --label bug,payments,inbox-item)
               
               echo "✅ Created bug issue: $bug_issue"
               
@@ -208,6 +216,8 @@ jobs:
               if [ -n "$bug_num" ]; then
                 echo "🤖 @copilot please investigate and fix this bug. Create a reproduction test first." | \
                   gh issue comment "$bug_num" --body-file - || true
+                # Try to assign copilot-swe-agent if it exists
+                gh issue edit "$bug_num" --add-assignee copilot-swe-agent 2>/dev/null || echo "Note: copilot-swe-agent not available for assignment"
               fi
             fi
 
@@ -218,14 +228,15 @@ jobs:
               # Extract docs content
               awk '/## 3\) Docs:/,/^---$/{if(!/^---$/) print}' "$filepath" > /tmp/docs.md
               
-              # Create docs issue
-              docs_issue=$(gh issue create \
+            # Create docs issue
+            docs_issue=$(gh issue create \
+              --title "📚 $docs_title" \
+              --body-file /tmp/docs.md \
+              --label documentation,inbox-item 2>/dev/null || \
+              gh issue create \
                 --title "📚 $docs_title" \
                 --body-file /tmp/docs.md \
-                --label documentation,inbox-item \
-                --assignee copilot-swe-agent || true)
-              
-              echo "✅ Created documentation issue: $docs_issue"
+                --label documentation,inbox-item)              echo "✅ Created documentation issue: $docs_issue"
               
               # Add Copilot trigger comment
               docs_num=$(echo "$docs_issue" | grep -o '[0-9]*$')
@@ -241,14 +252,15 @@ jobs:
               # Extract config content
               awk '/## 4\) Code\/Config to integrate via PR/,EOF' "$filepath" > /tmp/config.md
               
-              # Create config PR coordination issue
-              config_issue=$(gh issue create \
+            # Create config PR coordination issue
+            config_issue=$(gh issue create \
+              --title "⚙️ Create Configuration PR: rate-limits.json" \
+              --body-file /tmp/config.md \
+              --label enhancement,configuration,inbox-item 2>/dev/null || \
+              gh issue create \
                 --title "⚙️ Create Configuration PR: rate-limits.json" \
                 --body-file /tmp/config.md \
-                --label enhancement,configuration,inbox-item \
-                --assignee copilot-swe-agent || true)
-              
-              echo "✅ Created configuration PR issue: $config_issue"
+                --label enhancement,configuration,inbox-item)              echo "✅ Created configuration PR issue: $config_issue"
               
               # Add Copilot trigger comment
               config_num=$(echo "$config_issue" | grep -o '[0-9]*$')
