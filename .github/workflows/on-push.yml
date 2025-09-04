@@ -26,6 +26,15 @@ jobs:
         with:
           fetch-depth: 2  # Ensure we can compare with previous commit
 
+      # Create required labels if they don't exist
+      - name: Ensure labels exist
+        run: |
+          # Create labels if they don't exist (ignore errors if they already exist)
+          gh label create "copilot" --description "Issues for Copilot agent processing" --color "0366d6" || true
+          gh label create "automation" --description "Automated processes" --color "fbca04" || true
+          gh label create "triage" --description "Needs triage and processing" --color "d73a4a" || true
+          gh label create "from-file" --description "Created from inbox file" --color "7057ff" || true
+
       # Find files added or modified in this push under inbox/
       - name: List changed inbox files
         id: diff
@@ -94,7 +103,7 @@ jobs:
               gh issue create \
               --title "$title" \
               --body-file /tmp/body.md \
-              --label copilot,automation,triage,from-file)
+              --label automation,triage,from-file)
 
             echo "✅ Created Copilot task issue for $f: $issue_url"
             
