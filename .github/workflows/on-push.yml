@@ -71,14 +71,13 @@ jobs:
               echo "- Keep PRs small and incremental where possible."
             } > /tmp/body.md
 
-            num=$(gh issue create \
+            gh issue create \
               --title "$title" \
               --body-file /tmp/body.md \
               --label from-file,automation,copilot \
-              --assignee copilot-swe-agent \
-              --json number -q .number)
+              --assignee copilot-swe-agent
 
-            echo "Opened task issue #$num for $f"
+            echo "Created task issue for $f"
           done < added.txt
 
   # Auto-assign copilot-swe-agent to any newly opened Issue (including those Copilot creates)
