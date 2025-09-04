@@ -1,7 +1,7 @@
 ---
 type: intake
 source: test
-intent: "Exercise Copilot triage: create issues and a PR with enhanced workflow"
+intent: "Exercise Copilot triage: create issues and a PR with fixed workflow"
 ---
 
 # Intake: multi-item test
