@@ -1,4 +1,4 @@
-name: Inbox Monitor → Copilot Automation
+name: Inbox → Copilot triage
 
 on:
   push:
@@ -14,286 +14,125 @@ permissions:
   pull-requests: write
 
 jobs:
-  # Monitor inbox folder for new/edited files and delegate to Copilot
-  inbox_monitor:
+  intake:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
 
-      # Ensure required labels exist
-      - name: Setup labels
+      # Find files newly ADDED under inbox/ in this push
+      - name: List newly-added inbox files
+        id: diff
         run: |
-          gh label create "copilot-task" --description "Task assigned to Copilot agent" --color "0366d6" || true
-          gh label create "inbox-item" --description "Generated from inbox file" --color "7057ff" || true
-          gh label create "auto-generated" --description "Automatically generated" --color "fbca04" || true
-          gh label create "enhancement" --description "New feature or request" --color "a2eeef" || true
-          gh label create "bug" --description "Something isn't working" --color "d73a49" || true
-          gh label create "documentation" --description "Improvements or additions to documentation" --color "0075ca" || true
-          gh label create "backend" --description "Backend related" --color "5319e7" || true
-          gh label create "payments" --description "Payment system related" --color "ff6b6b" || true
-          gh label create "configuration" --description "Configuration changes" --color "f9ca24" || true
+          git fetch --depth=1 origin "${{ github.event.before }}" || true
+          git diff --name-only --diff-filter=A "${{ github.event.before }}" "${{ github.sha }}" -- 'inbox/**' > added.txt
+          echo "count=$(wc -l < added.txt)" >> "$GITHUB_OUTPUT"
+          echo "files<<EOF" >> "$GITHUB_OUTPUT"
+          cat added.txt >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
-      # Check if Copilot is available in the repository
-      - name: Check Copilot availability
+      # Detect if copilot-swe-agent is assignable in this repo
+      - name: Detect Copilot agent availability
+        id: copilot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "🔍 Checking GitHub Copilot availability..."
-          # Check if repository has Copilot enabled (this will help with debugging)
-          echo "Repository: ${{ github.repository }}"
-          echo "Workflow triggered by: ${{ github.event_name }}"
-          echo "GitHub actor: ${{ github.actor }}"
-
-      # Find changed files in inbox/
-      - name: Detect inbox changes
-        id: changes
-        run: |
-          git diff --name-only --diff-filter=AM "${{ github.event.before }}" "${{ github.sha }}" -- 'inbox/**' > changed_files.txt
-          file_count=$(wc -l < changed_files.txt)
-          echo "count=$file_count" >> "$GITHUB_OUTPUT"
-          if [ "$file_count" -gt 0 ]; then
-            echo "📁 Detected changes in inbox files:"
-            cat changed_files.txt
+          set -e
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+          RESP=$(gh api graphql -f query='
+            query($o:String!,$r:String!){
+              repository(owner:$o,name:$r){
+                suggestedActors(capabilities:[CAN_BE_ASSIGNED], first:100){
+                  nodes{ login __typename ... on Bot{id} ... on User{id} }
+                }
+              }
+            }' -F o="$OWNER" -F r="$REPO")
+          ID=$(echo "$RESP" | jq -r '.data.repository.suggestedActors.nodes[] | select(.login=="copilot-swe-agent") | .id')
+          if [ -n "$ID" ] && [ "$ID" != "null" ]; then
+            echo "available=true" >> $GITHUB_OUTPUT
+            echo "id=$ID" >> $GITHUB_OUTPUT
+            echo "✅ Copilot agent is assignable (id: $ID)"
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Copilot agent not assignable in this repo."
           fi
 
-      # Process each changed file
-      - name: Delegate to Copilot Agent
-        if: steps.changes.outputs.count != '0'
+      # Create a Copilot task Issue per new file, embedding the content + instructions
+      - name: Create Copilot task issues (one per file)
+        if: steps.diff.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          while IFS= read -r filepath; do
-            [ -z "$filepath" ] && continue
-            
-            filename=$(basename "$filepath")
-            echo "🔄 Processing: $filepath"
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            echo "🎯 Creating task issue for: $f"
 
-            # Prepare file content for Copilot
-            if [ "$(wc -c < "$filepath")" -gt 900000 ]; then
-              head -c 900000 "$filepath" > /tmp/content.txt
-              echo -e "\n\n[TRUNCATED: File was too large for processing]" >> /tmp/content.txt
+            # Read file content (truncate if huge to avoid API limits)
+            if [ "$(wc -c < "$f")" -gt 950000 ]; then
+              head -c 950000 "$f" > /tmp/file_body.txt
+              echo -e "\n\n[NOTE: truncated for length]" >> /tmp/file_body.txt
             else
-              cp "$filepath" /tmp/content.txt
+              cp "$f" /tmp/file_body.txt
             fi
 
-            # Create comprehensive prompt for Copilot
+            # Build task prompt for Copilot
             {
-              echo "## 🤖 GitHub Copilot Agent Task"
-              echo ""
-              echo "### Assignment: Analyze Inbox File and Create Issues/PRs"
-              echo ""
-              echo "**File to Process:** \`$filepath\`"
-              echo "**Repository:** ${{ github.repository }}"
-              echo "**Commit:** ${{ github.sha }}"
-              echo ""
-              echo "### Instructions for Copilot Agent:"
-              echo ""
-              echo "Please analyze the content below and automatically create appropriate GitHub Issues and Pull Requests:"
-              echo ""
-              echo "#### 1. Content Analysis"
-              echo "- Examine the file content thoroughly"
-              echo "- Identify: bug reports, feature requests, code snippets, documentation, configuration files"
-              echo ""
-              echo "#### 2. Create Issues For:"
-              echo "- **Bug Reports:** Create detailed issues with reproduction steps, expected vs actual behavior"
-              echo "- **Feature Requests:** Create enhancement issues with clear requirements and acceptance criteria"
-              echo "- **Questions/Discussions:** Create discussion issues for clarification needs"
-              echo ""
-              echo "#### 3. Create Pull Requests For:"
-              echo "- **Code/Config/Docs:** Create draft PRs implementing the suggested changes"
-              echo "- **Include:** Appropriate tests, documentation updates, clear commit messages"
-              echo "- **Branch naming:** Use pattern 'copilot/$(echo ${{ github.sha }} | cut -c1-8)-$(echo $filename | tr -cs \"[:alnum:]\" \"-\")'"
-              echo ""
-              echo "#### 4. Requirements:"
-              echo "- Reference this coordination issue (#ISSUE_NUMBER) in all created items"
-              echo "- Use appropriate labels: \`bug\`, \`enhancement\`, \`documentation\`, \`question\`"
-              echo "- Follow repository best practices and existing patterns"
-              echo "- Add detailed descriptions and context to all created items"
-              echo ""
-              echo "---"
-              echo ""
-              echo "### File Content to Analyze:"
-              echo ""
+              echo "## Task"
+              echo "You are \`copilot-swe-agent\`. Analyze the file below and take actions:"
+              echo "- If it describes bugs or features: create Issues with titles, summaries, acceptance criteria, and TODO checklists."
+              echo "- If it is code/config/docs to integrate: open a **draft PR** implementing the change, with tests/docs as needed."
+              echo "- Reference this task Issue in everything you create and link back."
+              echo "- Apply labels based on content (\`bug\`, \`enhancement\`, \`documentation\`)."
+              echo "- **Assign \`copilot-swe-agent\` to every Issue and PR you create.**"
+              echo "- Branch naming suggestion: \`copilot/${GITHUB_SHA::7}-$(basename "$f" | tr -cs '[:alnum:]' -)\`."
+              echo
+              echo "## Source file"
+              echo "Path: \`$f\`"
+              echo
               echo '```'
-              cat /tmp/content.txt
+              cat /tmp/file_body.txt
+              echo
               echo '```'
-              echo ""
-              echo "### Next Steps:"
-              echo "1. Respond with 👀 to acknowledge this task"
-              echo "2. Analyze the content and create appropriate Issues/PRs"
-              echo "3. Comment back here with links to created items"
-              echo ""
-              echo "**Ready for processing!** 🚀"
-            } > /tmp/task.md
+              echo
+              echo "## Notes"
+              echo "- If information is missing, proceed with best effort and leave questions as PR review comments."
+              echo "- Keep PRs small and incremental; follow CONTRIBUTING.md if present."
+            } > /tmp/body.md
 
-            # Create coordination issue for Copilot Agent
-            issue_url=$(gh issue create \
-              --title "🤖 Copilot Agent: Process $filename" \
-              --body-file /tmp/task.md \
-              --label copilot-task,inbox-item,auto-generated)
-
-            echo "✅ Created Copilot coordination issue: $issue_url"
-
-            # Extract issue number for follow-up actions
-            issue_num=$(echo "$issue_url" | grep -o '[0-9]*$')
-            
-            if [ -n "$issue_num" ]; then
-              # Add multiple trigger approaches to ensure Copilot sees the task
-              echo "🤖 @copilot please analyze and process this inbox file as described above." | \
-                gh issue comment "$issue_num" --body-file -
-              
-              # Also try alternative mentions that might trigger the agent
-              echo "/copilot analyze" | gh issue comment "$issue_num" --body-file - || true
-              echo "@github-copilot[bot] please process this file" | gh issue comment "$issue_num" --body-file - || true
-              
-              echo "📌 Added trigger comments to issue #$issue_num"
+            # Create the Issue; assign Copilot if available
+            ASSIGNEE_ARG=""
+            if [ "${{ steps.copilot.outputs.available }}" = "true" ]; then
+              ASSIGNEE_ARG="--assignee copilot-swe-agent"
             fi
 
-          done < changed_files.txt
+            gh issue create \
+              --title "Copilot: Analyze and act on $(basename "$f")" \
+              --body-file /tmp/body.md \
+              --label automation,copilot,from-file \
+              $ASSIGNEE_ARG
+          done < added.txt
 
-      # Create individual issues for each item in intake files and assign copilot-swe-agent
-      - name: Create Individual Issues and Assign Copilot SWE Agent
-        if: steps.changes.outputs.count != '0'
-        run: |
-          while IFS= read -r filepath; do
-            [ -z "$filepath" ] && continue
-            
-            filename=$(basename "$filepath")
-            echo "🎯 Creating individual issues for: $filepath"
-
-            # Parse the file for structured items (Features, Bugs, Docs)
-            if grep -q "## 1) Feature:" "$filepath"; then
-              echo "📝 Creating Feature issue..."
-              feature_title=$(grep "## 1) Feature:" "$filepath" | sed 's/## 1) Feature: //')
-              
-              # Extract feature content
-              awk '/## 1\) Feature:/,/^---$/{if(!/^---$/) print}' "$filepath" > /tmp/feature.md
-              
-            # Create feature issue
-            feature_issue=$(gh issue create \
-              --title "✨ $feature_title" \
-              --body-file /tmp/feature.md \
-              --label enhancement,backend,inbox-item 2>/dev/null || \
-              gh issue create \
-                --title "✨ $feature_title" \
-                --body-file /tmp/feature.md \
-                --label enhancement,backend,inbox-item)
-              
-              echo "✅ Created feature issue: $feature_issue"
-              
-              # Add Copilot trigger comment
-              feature_num=$(echo "$feature_issue" | grep -o '[0-9]*$')
-              if [ -n "$feature_num" ]; then
-                echo "🤖 @copilot please implement this feature request. Break it down into smaller tasks and create a plan." | \
-                  gh issue comment "$feature_num" --body-file - || true
-                # Try to assign copilot-swe-agent if it exists
-                gh issue edit "$feature_num" --add-assignee copilot-swe-agent 2>/dev/null || echo "Note: copilot-swe-agent not available for assignment"
-              fi
-            fi
-
-            if grep -q "## 2) Bug:" "$filepath"; then
-              echo "🐛 Creating Bug issue..."
-              bug_title=$(grep "## 2) Bug:" "$filepath" | sed 's/## 2) Bug: //')
-              
-              # Extract bug content
-              awk '/## 2\) Bug:/,/^---$/{if(!/^---$/) print}' "$filepath" > /tmp/bug.md
-              
-            # Create bug issue
-            bug_issue=$(gh issue create \
-              --title "🐛 $bug_title" \
-              --body-file /tmp/bug.md \
-              --label bug,payments,inbox-item 2>/dev/null || \
-              gh issue create \
-                --title "🐛 $bug_title" \
-                --body-file /tmp/bug.md \
-                --label bug,payments,inbox-item)
-              
-              echo "✅ Created bug issue: $bug_issue"
-              
-              # Add Copilot trigger comment
-              bug_num=$(echo "$bug_issue" | grep -o '[0-9]*$')
-              if [ -n "$bug_num" ]; then
-                echo "🤖 @copilot please investigate and fix this bug. Create a reproduction test first." | \
-                  gh issue comment "$bug_num" --body-file - || true
-                # Try to assign copilot-swe-agent if it exists
-                gh issue edit "$bug_num" --add-assignee copilot-swe-agent 2>/dev/null || echo "Note: copilot-swe-agent not available for assignment"
-              fi
-            fi
-
-            if grep -q "## 3) Docs:" "$filepath"; then
-              echo "📚 Creating Documentation issue..."
-              docs_title=$(grep "## 3) Docs:" "$filepath" | sed 's/## 3) Docs: //')
-              
-              # Extract docs content
-              awk '/## 3\) Docs:/,/^---$/{if(!/^---$/) print}' "$filepath" > /tmp/docs.md
-              
-            # Create docs issue
-            docs_issue=$(gh issue create \
-              --title "📚 $docs_title" \
-              --body-file /tmp/docs.md \
-              --label documentation,inbox-item 2>/dev/null || \
-              gh issue create \
-                --title "📚 $docs_title" \
-                --body-file /tmp/docs.md \
-                --label documentation,inbox-item)              echo "✅ Created documentation issue: $docs_issue"
-              
-              # Add Copilot trigger comment
-              docs_num=$(echo "$docs_issue" | grep -o '[0-9]*$')
-              if [ -n "$docs_num" ]; then
-                echo "🤖 @copilot please update the documentation as described." | \
-                  gh issue comment "$docs_num" --body-file - || true
-              fi
-            fi
-
-            if grep -q "## 4) Code/Config to integrate via PR" "$filepath"; then
-              echo "⚙️ Creating Configuration PR issue..."
-              
-              # Extract config content
-              awk '/## 4\) Code\/Config to integrate via PR/,EOF' "$filepath" > /tmp/config.md
-              
-            # Create config PR coordination issue
-            config_issue=$(gh issue create \
-              --title "⚙️ Create Configuration PR: rate-limits.json" \
-              --body-file /tmp/config.md \
-              --label enhancement,configuration,inbox-item 2>/dev/null || \
-              gh issue create \
-                --title "⚙️ Create Configuration PR: rate-limits.json" \
-                --body-file /tmp/config.md \
-                --label enhancement,configuration,inbox-item)              echo "✅ Created configuration PR issue: $config_issue"
-              
-              # Add Copilot trigger comment
-              config_num=$(echo "$config_issue" | grep -o '[0-9]*$')
-              if [ -n "$config_num" ]; then
-                echo "🤖 @copilot please create a draft PR implementing the configuration changes as described." | \
-                  gh issue comment "$config_num" --body-file - || true
-              fi
-            fi
-
-          done < changed_files.txt
-
-  # Try to trigger Copilot on new issues
-  auto_assign_issues:
+  # Belt-and-suspenders: auto-assign Copilot to any newly opened Issue
+  auto_assign_issue:
     if: github.event_name == 'issues' && github.event.action == 'opened'
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Copilot on new issues
+      - name: Assign copilot-swe-agent to Issue (if available)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "📝 New issue #${{ github.event.issue.number }} was created"
-          echo "🤖 @copilot please review this new issue and provide assistance if needed." | \
-            gh issue comment "${{ github.event.issue.number }}" --body-file - || true
+          # Try to assign; if agent isn't available, this will no-op
+          gh issue edit "${{ github.event.issue.number }}" --add-assignee copilot-swe-agent || true
 
-  # Try to trigger Copilot on new PRs
-  auto_assign_prs:
+  # Belt-and-suspenders: auto-assign Copilot to any newly opened PR
+  auto_assign_pr:
     if: github.event_name == 'pull_request' && github.event.action == 'opened'
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Copilot on new PRs
+      - name: Assign copilot-swe-agent to PR (if available)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "🔀 New PR #${{ github.event.pull_request.number }} was created"
-          echo "🤖 @copilot please review this new pull request." | \
-            gh issue comment "${{ github.event.pull_request.number }}" --body-file - || true
+          # PRs are issues under the hood
+          gh issue edit "${{ github.event.pull_request.number }}" --add-assignee copilot-swe-agent || true
