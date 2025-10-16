@@ -70,7 +70,7 @@ jobs:
             fi
             
             # Get PRs for this repo
-            PRS=$(gh search prs "$SEARCH_QUERY" --limit "$MAX_PRS" --json number,title,author,url,createdAt,updatedAt,isDraft,additions,deletions --jq '.')
+            PRS=$(gh search prs "$SEARCH_QUERY" --limit "$MAX_PRS" --json number,title,author,url,createdAt,updatedAt,isDraft --jq '.')
             
             PR_COUNT=$(echo "$PRS" | jq '. | length')
             
@@ -93,8 +93,6 @@ jobs:
                 PR_CREATED=$(echo "$pr" | jq -r '.createdAt')
                 PR_UPDATED=$(echo "$pr" | jq -r '.updatedAt')
                 PR_DRAFT=$(echo "$pr" | jq -r '.isDraft')
-                PR_ADDITIONS=$(echo "$pr" | jq -r '.additions // 0')
-                PR_DELETIONS=$(echo "$pr" | jq -r '.deletions // 0')
                 
                 # Format dates
                 CREATED_DATE=$(date -d "$PR_CREATED" '+%Y-%m-%d' 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "$PR_CREATED" '+%Y-%m-%d' 2>/dev/null || echo "$PR_CREATED")
@@ -111,13 +109,12 @@ jobs:
                 echo "- **Author:** @$PR_AUTHOR" >> "$REPORT_FILE"
                 echo "- **Created:** $CREATED_DATE" >> "$REPORT_FILE"
                 echo "- **Updated:** $UPDATED_DATE" >> "$REPORT_FILE"
-                echo "- **Changes:** +$PR_ADDITIONS / -$PR_DELETIONS" >> "$REPORT_FILE"
                 echo "- **URL:** $PR_URL" >> "$REPORT_FILE"
                 echo "" >> "$REPORT_FILE"
                 
                 # Get PR details including files changed
                 echo "  📄 Fetching details for PR #$PR_NUMBER..."
-                PR_DETAILS=$(gh pr view "$PR_NUMBER" --repo "$repo" --json body,labels,reviewDecision,files 2>/dev/null || echo '{}')
+                PR_DETAILS=$(gh pr view "$PR_NUMBER" --repo "$repo" --json body,labels,reviewDecision,additions,deletions,files 2>/dev/null || echo '{}')
                 
                 # Add body/description
                 PR_BODY=$(echo "$PR_DETAILS" | jq -r '.body // "No description provided."' | head -c 500)
@@ -127,6 +124,12 @@ jobs:
                   echo "$PR_BODY" | sed 's/^/> /' >> "$REPORT_FILE"
                   echo "" >> "$REPORT_FILE"
                 fi
+                
+                # Add code changes
+                PR_ADDITIONS=$(echo "$PR_DETAILS" | jq -r '.additions // 0')
+                PR_DELETIONS=$(echo "$PR_DETAILS" | jq -r '.deletions // 0')
+                echo "**Changes:** +$PR_ADDITIONS / -$PR_DELETIONS lines" >> "$REPORT_FILE"
+                echo "" >> "$REPORT_FILE"
                 
                 # Add labels
                 LABELS=$(echo "$PR_DETAILS" | jq -r '.labels[]?.name // empty' | tr '\n' ', ' | sed 's/, $//')
