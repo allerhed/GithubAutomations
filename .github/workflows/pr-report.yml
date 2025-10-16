@@ -30,6 +30,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set +e  # Don't exit on error
           REPORT_FILE="reports/pr-report-$(date +%Y-%m-%d-%H%M%S).md"
           MAX_PRS="${{ github.event.inputs.max_prs_per_repo }}"
           INCLUDE_DRAFT="${{ github.event.inputs.include_draft }}"
