@@ -63,16 +63,23 @@ jobs:
             
             echo "🔎 Checking $repo..."
             
-            # Build PR query
-            SEARCH_QUERY="repo:$repo is:pr is:open"
+            # Build PR query - use proper format for repo search
             if [ "$INCLUDE_DRAFT" != "true" ]; then
-              SEARCH_QUERY="$SEARCH_QUERY -is:draft"
+              SEARCH_QUERY="repo:$repo is:pr is:open -is:draft"
+            else
+              SEARCH_QUERY="repo:$repo is:pr is:open"
             fi
             
             # Get PRs for this repo
-            PRS=$(gh search prs "$SEARCH_QUERY" --limit "$MAX_PRS" --json number,title,author,url,createdAt,updatedAt,isDraft --jq '.')
+            PRS=$(gh search prs "$SEARCH_QUERY" --limit "$MAX_PRS" --json number,title,author,url,createdAt,updatedAt,isDraft --jq '.' 2>&1)
             
-            PR_COUNT=$(echo "$PRS" | jq '. | length')
+            # Check if search failed (no PRs or error)
+            if echo "$PRS" | grep -q "Invalid search query\|cannot be searched\|error"; then
+              echo "  ⚠️ Skipping $repo (no access or no PRs)"
+              continue
+            fi
+            
+            PR_COUNT=$(echo "$PRS" | jq '. | length' 2>/dev/null || echo "0")
             
             if [ "$PR_COUNT" -gt 0 ]; then
               echo "  ✅ Found $PR_COUNT PR(s)"
