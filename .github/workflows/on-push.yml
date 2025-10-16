@@ -115,11 +115,28 @@ jobs:
 
               echo "📝 Creating issue: $TITLE"
               
-              # Create the issue
-              gh issue create \
+              # Create the issue without labels first, then add labels that exist
+              set +e
+              ISSUE_URL=$(gh issue create \
                 --title "$TITLE" \
-                --body-file /tmp/issue_body.md \
-                --label "$LABELS" || echo "⚠️ Failed to create issue: $TITLE"
+                --body-file /tmp/issue_body.md 2>&1)
+              CREATE_EXIT=$?
+              set -e
+              
+              if [ $CREATE_EXIT -eq 0 ]; then
+                echo "✅ Created issue: $ISSUE_URL"
+                
+                # Try to add labels one by one (ignore failures for non-existent labels)
+                if [ -n "$LABELS" ] && [ "$LABELS" != "null" ]; then
+                  IFS=',' read -ra LABEL_ARRAY <<< "$LABELS"
+                  for label in "${LABEL_ARRAY[@]}"; do
+                    label=$(echo "$label" | xargs)  # trim whitespace
+                    gh issue edit "$ISSUE_URL" --add-label "$label" 2>/dev/null || echo "  ⚠️ Label '$label' not found, skipping"
+                  done
+                fi
+              else
+                echo "⚠️ Failed to create issue: $TITLE - $ISSUE_URL"
+              fi
             done
 
             echo "✅ Completed analysis of $f"
