@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
   pull-requests: read
 
 jobs:
@@ -28,7 +29,7 @@ jobs:
 
       - name: Generate PR Report
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN != '' && secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set +e  # Don't exit on error
           REPORT_FILE="reports/pr-report-$(date +%Y-%m-%d-%H%M%S).md"
