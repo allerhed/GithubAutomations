@@ -32,6 +32,13 @@ jobs:
           cat added.txt >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
+      # Install gh-models extension
+      - name: Install gh-models extension
+        if: steps.diff.outputs.count != '0'
+        run: gh extension install https://github.com/github/gh-models
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # Analyze inbox files with GitHub Models (GPT-4o) and create issues
       - name: Analyze inbox files and create issues
         if: steps.diff.outputs.count != '0'
@@ -50,44 +57,18 @@ jobs:
               cp "$f" /tmp/file_content.txt
             fi
 
-            FILE_CONTENT=$(cat /tmp/file_content.txt)
+            # Create system prompt
+            SYSTEM_PROMPT="You are an expert software project manager analyzing intake documents. Your task is to parse the document and extract actionable items (features, bugs, documentation tasks, etc.). For each item found, output a JSON object with: title, body (markdown with summary, acceptance criteria as checklist, context), labels (array of strings like 'bug', 'enhancement', 'documentation', 'backend', 'frontend', etc.). Output ONLY a valid JSON array of issue objects, nothing else. Example: [{\"title\":\"Feature: Add rate limiting\",\"body\":\"## Summary\\n...\\n## Acceptance Criteria\\n- [ ] ...\",\"labels\":[\"enhancement\",\"backend\"]}]"
 
-            # Create prompt for GitHub Models
-            cat > /tmp/prompt.json <<'PROMPT_EOF'
-          {
-            "model": "gpt-4o",
-            "messages": [
-              {
-                "role": "system",
-                "content": "You are an expert software project manager analyzing intake documents. Your task is to parse the document and extract actionable items (features, bugs, documentation tasks, etc.). For each item found, output a JSON object with: title, body (markdown with summary, acceptance criteria as checklist, context), labels (array of strings like 'bug', 'enhancement', 'documentation', 'backend', 'frontend', etc.). Output ONLY a valid JSON array of issue objects, nothing else. Example: [{\"title\":\"Feature: Add rate limiting\",\"body\":\"## Summary\\n...\\n## Acceptance Criteria\\n- [ ] ...\",\"labels\":[\"enhancement\",\"backend\"]}]"
-              },
-              {
-                "role": "user",
-                "content": "Analyze this intake document and extract all actionable items as separate GitHub issues:\n\n"
-              }
-            ],
-            "temperature": 0.3,
-            "max_tokens": 4000
-          }
-          PROMPT_EOF
+            USER_PROMPT="Analyze this intake document and extract all actionable items as separate GitHub issues:"
 
-            # Add file content to prompt
-            jq --arg content "$FILE_CONTENT" '.messages[1].content += $content' /tmp/prompt.json > /tmp/prompt_final.json
-
-            # Call GitHub Models API
-            RESPONSE=$(gh api \
-              --method POST \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              -H "Content-Type: application/json" \
-              /models/chat/completions \
-              --input /tmp/prompt_final.json 2>&1) || {
-              echo "❌ GitHub Models API call failed: $RESPONSE"
+            # Call GitHub Models using gh-models extension
+            ISSUES_JSON=$(cat /tmp/file_content.txt | gh models run gpt-4o --system "$SYSTEM_PROMPT" "$USER_PROMPT" 2>&1)
+            
+            if [ $? -ne 0 ]; then
+              echo "❌ GitHub Models API call failed: $ISSUES_JSON"
               continue
-            }
-
-            # Extract the response content
-            ISSUES_JSON=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' 2>/dev/null)
+            fi
             
             if [ -z "$ISSUES_JSON" ] || [ "$ISSUES_JSON" = "null" ]; then
               echo "⚠️ No valid response from GitHub Models for $f"
