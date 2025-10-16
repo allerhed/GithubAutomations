@@ -35,6 +35,12 @@ jobs:
           MAX_PRS="${{ github.event.inputs.max_prs_per_repo }}"
           INCLUDE_DRAFT="${{ github.event.inputs.include_draft }}"
           
+          # Debug output
+          echo "📊 Configuration:"
+          echo "  MAX_PRS: $MAX_PRS"
+          echo "  INCLUDE_DRAFT: $INCLUDE_DRAFT"
+          echo ""
+          
           echo "📊 Generating PR report..."
           echo "# Pull Request Report" > "$REPORT_FILE"
           echo "" >> "$REPORT_FILE"
@@ -66,13 +72,19 @@ jobs:
             
             # Get PRs for this repo using gh pr list (more reliable than search)
             if [ "$INCLUDE_DRAFT" != "true" ]; then
+              echo "  Filtering out draft PRs..."
               PRS=$(gh pr list --repo "$repo" --limit "$MAX_PRS" --state open --json number,title,author,url,createdAt,updatedAt,isDraft --jq '[.[] | select(.isDraft == false)]' 2>&1)
             else
+              echo "  Including draft PRs..."
               PRS=$(gh pr list --repo "$repo" --limit "$MAX_PRS" --state open --json number,title,author,url,createdAt,updatedAt,isDraft --jq '.' 2>&1)
             fi
             
             # Check if command failed
-            if [ $? -ne 0 ]; then
+            EXIT_CODE=$?
+            echo "  Exit code: $EXIT_CODE"
+            echo "  PRS data: ${PRS:0:200}..."
+            
+            if [ $EXIT_CODE -ne 0 ]; then
               echo "  ⚠️ Skipping $repo (no access)"
               continue
             fi
