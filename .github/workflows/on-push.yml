@@ -63,10 +63,13 @@ jobs:
             USER_PROMPT="Analyze this intake document and extract all actionable items as separate GitHub issues:"
 
             # Call GitHub Models using gh-models extension
+            set +e  # Temporarily disable exit on error
             ISSUES_JSON=$(cat /tmp/file_content.txt | gh models run gpt-4o --system "$SYSTEM_PROMPT" "$USER_PROMPT" 2>&1)
+            EXIT_CODE=$?
+            set -e  # Re-enable exit on error
             
-            if [ $? -ne 0 ]; then
-              echo "❌ GitHub Models API call failed: $ISSUES_JSON"
+            if [ $EXIT_CODE -ne 0 ]; then
+              echo "❌ GitHub Models API call failed with exit code $EXIT_CODE: $ISSUES_JSON"
               continue
             fi
             
