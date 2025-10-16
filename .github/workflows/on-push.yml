@@ -57,15 +57,21 @@ jobs:
               cp "$f" /tmp/file_content.txt
             fi
 
-            # Create prompt for GitHub Models
-            {
-              echo "You are an expert software project manager analyzing intake documents. Your task is to parse the document and extract actionable items (features, bugs, documentation tasks, etc.). For each item found, output a JSON object with: title, body (markdown with summary, acceptance criteria as checklist, context), labels (array of strings like 'bug', 'enhancement', 'documentation', 'backend', 'frontend', etc.). Output ONLY a valid JSON array of issue objects, nothing else. Example: [{\"title\":\"Feature: Add rate limiting\",\"body\":\"## Summary\\n...\\n## Acceptance Criteria\\n- [ ] ...\",\"labels\":[\"enhancement\",\"backend\"]}]"
-              echo ""
-              echo "Analyze this intake document and extract all actionable items as separate GitHub issues:"
-              echo ""
-              cat /tmp/file_content.txt
-            } > /tmp/full_prompt.txt
+            # Create system and user prompts
+            SYSTEM_PROMPT="You are an expert software project manager analyzing intake documents. Your task is to parse the document and extract actionable items (features, bugs, documentation tasks, etc.). For each item found, output a JSON object with: title, body (markdown with summary, acceptance criteria as checklist, context), labels (array of strings like 'bug', 'enhancement', 'documentation', 'backend', 'frontend', etc.). Output ONLY a valid JSON array of issue objects, nothing else. Example: [{\"title\":\"Feature: Add rate limiting\",\"body\":\"## Summary\\n...\\n## Acceptance Criteria\\n- [ ] ...\",\"labels\":[\"enhancement\",\"backend\"]}]"
+            
+            USER_PROMPT="Analyze this intake document and extract all actionable items as separate GitHub issues:"
 
+            # Call GitHub Models using gh-models extension
+            set +e  # Temporarily disable exit on error
+            ISSUES_JSON=$(cat /tmp/file_content.txt | gh models run openai/gpt-4o --system-prompt "$SYSTEM_PROMPT" "$USER_PROMPT" 2>&1)
+            EXIT_CODE=$?
+            set -e  # Re-enable exit on error
+            
+            if [ $EXIT_CODE -ne 0 ]; then
+              echo "❌ GitHub Models API call failed with exit code $EXIT_CODE: $ISSUES_JSON"
+              continue
+            fi
             # Call GitHub Models using gh-models extension
             set +e  # Temporarily disable exit on error
             ISSUES_JSON=$(cat /tmp/full_prompt.txt | gh models run gpt-4o 2>&1)
