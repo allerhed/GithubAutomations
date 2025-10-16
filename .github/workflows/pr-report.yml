@@ -51,7 +51,18 @@ jobs:
 
           # Get list of all repos user has access to
           echo "🔍 Fetching repositories..."
-          REPOS=$(gh repo list --limit 100 --json nameWithOwner --jq '.[].nameWithOwner')
+          # Get repos owned by user
+          REPOS=$(gh api graphql -f query='
+            query {
+              viewer {
+                repositories(first: 100, affiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) {
+                  nodes {
+                    nameWithOwner
+                  }
+                }
+              }
+            }
+          ' --jq '.data.viewer.repositories.nodes[].nameWithOwner' 2>&1)
           
           if [ -z "$REPOS" ]; then
             echo "⚠️ No repositories found"
@@ -60,6 +71,8 @@ jobs:
             echo "No repositories accessible with the provided token." >> "$REPORT_FILE"
             exit 0
           fi
+          
+          echo "📊 Found $(echo "$REPOS" | wc -l | xargs) repositories"
 
           TOTAL_PRS=0
           REPOS_WITH_PRS=0
