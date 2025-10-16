@@ -55,6 +55,7 @@ jobs:
             # Create prompt for GitHub Models
             cat > /tmp/prompt.json <<'PROMPT_EOF'
           {
+            "model": "gpt-4o",
             "messages": [
               {
                 "role": "system",
@@ -78,7 +79,8 @@ jobs:
               --method POST \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              /models/gpt-4o/chat/completions \
+              -H "Content-Type: application/json" \
+              /models/chat/completions \
               --input /tmp/prompt_final.json 2>&1) || {
               echo "❌ GitHub Models API call failed: $RESPONSE"
               continue
