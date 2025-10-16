@@ -68,6 +68,12 @@ jobs:
             EXIT_CODE=$?
             set -e  # Re-enable exit on error
             
+            echo "🔍 DEBUG: Exit code: $EXIT_CODE"
+            echo "🔍 DEBUG: Raw response (first 500 chars):"
+            echo "$ISSUES_JSON" | head -c 500
+            echo ""
+            echo "🔍 DEBUG: Attempting to parse as JSON..."
+            
             if [ $EXIT_CODE -ne 0 ]; then
               echo "❌ GitHub Models API call failed with exit code $EXIT_CODE: $ISSUES_JSON"
               continue
@@ -76,6 +82,15 @@ jobs:
             if [ -z "$ISSUES_JSON" ] || [ "$ISSUES_JSON" = "null" ]; then
               echo "⚠️ No valid response from GitHub Models for $f"
               continue
+            fi
+
+            # Try to extract JSON from markdown code blocks if present
+            if echo "$ISSUES_JSON" | grep -q '```json'; then
+              echo "🔍 DEBUG: Detected markdown code block, extracting JSON..."
+              ISSUES_JSON=$(echo "$ISSUES_JSON" | sed -n '/```json/,/```/p' | sed '1d;$d')
+            elif echo "$ISSUES_JSON" | grep -q '```'; then
+              echo "🔍 DEBUG: Detected generic code block, extracting content..."
+              ISSUES_JSON=$(echo "$ISSUES_JSON" | sed -n '/```/,/```/p' | sed '1d;$d')
             fi
 
             # Parse and create issues
