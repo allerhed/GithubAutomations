@@ -72,16 +72,6 @@ jobs:
               echo "❌ GitHub Models API call failed with exit code $EXIT_CODE: $ISSUES_JSON"
               continue
             fi
-            # Call GitHub Models using gh-models extension
-            set +e  # Temporarily disable exit on error
-            ISSUES_JSON=$(cat /tmp/full_prompt.txt | gh models run gpt-4o 2>&1)
-            EXIT_CODE=$?
-            set -e  # Re-enable exit on error
-            
-            if [ $EXIT_CODE -ne 0 ]; then
-              echo "❌ GitHub Models API call failed with exit code $EXIT_CODE: $ISSUES_JSON"
-              continue
-            fi
             
             if [ -z "$ISSUES_JSON" ] || [ "$ISSUES_JSON" = "null" ]; then
               echo "⚠️ No valid response from GitHub Models for $f"
