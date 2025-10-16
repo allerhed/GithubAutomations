@@ -1,0 +1,200 @@
+name: Generate PR Report
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_prs_per_repo:
+        description: 'Maximum PRs to fetch per repository'
+        required: false
+        default: '10'
+      include_draft:
+        description: 'Include draft PRs'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create reports directory
+        run: mkdir -p reports
+
+      - name: Generate PR Report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPORT_FILE="reports/pr-report-$(date +%Y-%m-%d-%H%M%S).md"
+          MAX_PRS="${{ github.event.inputs.max_prs_per_repo }}"
+          INCLUDE_DRAFT="${{ github.event.inputs.include_draft }}"
+          
+          echo "📊 Generating PR report..."
+          echo "# Pull Request Report" > "$REPORT_FILE"
+          echo "" >> "$REPORT_FILE"
+          echo "**Generated:** $(date '+%Y-%m-%d %H:%M:%S UTC')" >> "$REPORT_FILE"
+          echo "" >> "$REPORT_FILE"
+          echo "---" >> "$REPORT_FILE"
+          echo "" >> "$REPORT_FILE"
+
+          # Get list of all repos user has access to
+          echo "🔍 Fetching repositories..."
+          REPOS=$(gh repo list --limit 100 --json nameWithOwner --jq '.[].nameWithOwner')
+          
+          if [ -z "$REPOS" ]; then
+            echo "⚠️ No repositories found"
+            echo "## No Repositories Found" >> "$REPORT_FILE"
+            echo "" >> "$REPORT_FILE"
+            echo "No repositories accessible with the provided token." >> "$REPORT_FILE"
+            exit 0
+          fi
+
+          TOTAL_PRS=0
+          REPOS_WITH_PRS=0
+
+          # Iterate through each repo
+          while IFS= read -r repo; do
+            [ -z "$repo" ] && continue
+            
+            echo "🔎 Checking $repo..."
+            
+            # Build PR query
+            SEARCH_QUERY="repo:$repo is:pr is:open"
+            if [ "$INCLUDE_DRAFT" != "true" ]; then
+              SEARCH_QUERY="$SEARCH_QUERY -is:draft"
+            fi
+            
+            # Get PRs for this repo
+            PRS=$(gh search prs "$SEARCH_QUERY" --limit "$MAX_PRS" --json number,title,author,url,createdAt,updatedAt,isDraft,additions,deletions --jq '.')
+            
+            PR_COUNT=$(echo "$PRS" | jq '. | length')
+            
+            if [ "$PR_COUNT" -gt 0 ]; then
+              echo "  ✅ Found $PR_COUNT PR(s)"
+              TOTAL_PRS=$((TOTAL_PRS + PR_COUNT))
+              REPOS_WITH_PRS=$((REPOS_WITH_PRS + 1))
+              
+              echo "## 📦 $repo" >> "$REPORT_FILE"
+              echo "" >> "$REPORT_FILE"
+              echo "**Open PRs:** $PR_COUNT" >> "$REPORT_FILE"
+              echo "" >> "$REPORT_FILE"
+              
+              # Process each PR
+              echo "$PRS" | jq -c '.[]' | while IFS= read -r pr; do
+                PR_NUMBER=$(echo "$pr" | jq -r '.number')
+                PR_TITLE=$(echo "$pr" | jq -r '.title')
+                PR_AUTHOR=$(echo "$pr" | jq -r '.author.login')
+                PR_URL=$(echo "$pr" | jq -r '.url')
+                PR_CREATED=$(echo "$pr" | jq -r '.createdAt')
+                PR_UPDATED=$(echo "$pr" | jq -r '.updatedAt')
+                PR_DRAFT=$(echo "$pr" | jq -r '.isDraft')
+                PR_ADDITIONS=$(echo "$pr" | jq -r '.additions // 0')
+                PR_DELETIONS=$(echo "$pr" | jq -r '.deletions // 0')
+                
+                # Format dates
+                CREATED_DATE=$(date -d "$PR_CREATED" '+%Y-%m-%d' 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "$PR_CREATED" '+%Y-%m-%d' 2>/dev/null || echo "$PR_CREATED")
+                UPDATED_DATE=$(date -d "$PR_UPDATED" '+%Y-%m-%d' 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "$PR_UPDATED" '+%Y-%m-%d' 2>/dev/null || echo "$PR_UPDATED")
+                
+                # Draft badge
+                DRAFT_BADGE=""
+                if [ "$PR_DRAFT" = "true" ]; then
+                  DRAFT_BADGE=" 🚧 **DRAFT**"
+                fi
+                
+                echo "### PR #$PR_NUMBER: $PR_TITLE$DRAFT_BADGE" >> "$REPORT_FILE"
+                echo "" >> "$REPORT_FILE"
+                echo "- **Author:** @$PR_AUTHOR" >> "$REPORT_FILE"
+                echo "- **Created:** $CREATED_DATE" >> "$REPORT_FILE"
+                echo "- **Updated:** $UPDATED_DATE" >> "$REPORT_FILE"
+                echo "- **Changes:** +$PR_ADDITIONS / -$PR_DELETIONS" >> "$REPORT_FILE"
+                echo "- **URL:** $PR_URL" >> "$REPORT_FILE"
+                echo "" >> "$REPORT_FILE"
+                
+                # Get PR details including files changed
+                echo "  📄 Fetching details for PR #$PR_NUMBER..."
+                PR_DETAILS=$(gh pr view "$PR_NUMBER" --repo "$repo" --json body,labels,reviewDecision,files 2>/dev/null || echo '{}')
+                
+                # Add body/description
+                PR_BODY=$(echo "$PR_DETAILS" | jq -r '.body // "No description provided."' | head -c 500)
+                if [ ${#PR_BODY} -gt 0 ]; then
+                  echo "**Description:**" >> "$REPORT_FILE"
+                  echo "" >> "$REPORT_FILE"
+                  echo "$PR_BODY" | sed 's/^/> /' >> "$REPORT_FILE"
+                  echo "" >> "$REPORT_FILE"
+                fi
+                
+                # Add labels
+                LABELS=$(echo "$PR_DETAILS" | jq -r '.labels[]?.name // empty' | tr '\n' ', ' | sed 's/, $//')
+                if [ -n "$LABELS" ]; then
+                  echo "**Labels:** $LABELS" >> "$REPORT_FILE"
+                  echo "" >> "$REPORT_FILE"
+                fi
+                
+                # Add review decision
+                REVIEW_DECISION=$(echo "$PR_DETAILS" | jq -r '.reviewDecision // "No reviews yet"')
+                echo "**Review Status:** $REVIEW_DECISION" >> "$REPORT_FILE"
+                echo "" >> "$REPORT_FILE"
+                
+                # Add files changed (summary)
+                FILES_CHANGED=$(echo "$PR_DETAILS" | jq -r '.files[]?.path // empty' | wc -l)
+                if [ "$FILES_CHANGED" -gt 0 ]; then
+                  echo "**Files Changed:** $FILES_CHANGED" >> "$REPORT_FILE"
+                  echo "" >> "$REPORT_FILE"
+                  echo "<details>" >> "$REPORT_FILE"
+                  echo "<summary>View changed files</summary>" >> "$REPORT_FILE"
+                  echo "" >> "$REPORT_FILE"
+                  echo "$PR_DETAILS" | jq -r '.files[]?.path // empty' | while IFS= read -r file; do
+                    [ -z "$file" ] && continue
+                    echo "- \`$file\`" >> "$REPORT_FILE"
+                  done
+                  echo "" >> "$REPORT_FILE"
+                  echo "</details>" >> "$REPORT_FILE"
+                  echo "" >> "$REPORT_FILE"
+                fi
+                
+                echo "---" >> "$REPORT_FILE"
+                echo "" >> "$REPORT_FILE"
+              done
+            fi
+          done <<< "$REPOS"
+
+          # Add summary at the top
+          {
+            echo ""
+            echo "## 📈 Summary"
+            echo ""
+            echo "- **Total Repositories Scanned:** $(echo "$REPOS" | wc -l | xargs)"
+            echo "- **Repositories with Open PRs:** $REPOS_WITH_PRS"
+            echo "- **Total Open PRs:** $TOTAL_PRS"
+            echo ""
+            echo "---"
+            echo ""
+            cat "$REPORT_FILE"
+          } > "$REPORT_FILE.tmp" && mv "$REPORT_FILE.tmp" "$REPORT_FILE"
+
+          echo "✅ Report generated: $REPORT_FILE"
+          echo "REPORT_FILE=$REPORT_FILE" >> $GITHUB_ENV
+
+      - name: Commit and push report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add reports/
+          git commit -m "📊 PR Report: $(date +%Y-%m-%d-%H%M%S)" || echo "No changes to commit"
+          git push || echo "No changes to push"
+
+      - name: Output summary
+        run: |
+          echo "✅ PR Report generated successfully!"
+          LATEST_REPORT=$(ls -t reports/pr-report-*.md 2>/dev/null | head -1)
+          if [ -f "$LATEST_REPORT" ]; then
+            echo "📁 Report saved to: $LATEST_REPORT"
+            echo ""
+            echo "Preview (first 50 lines):"
+            head -50 "$LATEST_REPORT"
+          fi
