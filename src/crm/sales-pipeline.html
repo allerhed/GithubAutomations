@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimpleCRM - Visual Sales Pipeline</title>
+    <link rel="stylesheet" href="pipeline-styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SimpleCRM - Sales Pipeline</h1>
+            <div class="header-info">
+                <span class="total-value">Total Pipeline Value: $<span id="totalValue">0</span></span>
+            </div>
+        </header>
+
+        <main class="pipeline-board">
+            <div class="pipeline-stage" data-stage="lead">
+                <div class="stage-header">
+                    <h2>Lead</h2>
+                    <span class="stage-count">0</span>
+                    <span class="stage-value">$0</span>
+                </div>
+                <div class="stage-content" data-stage-name="lead">
+                    <!-- Deals will be added here -->
+                </div>
+            </div>
+
+            <div class="pipeline-stage" data-stage="qualified">
+                <div class="stage-header">
+                    <h2>Qualified</h2>
+                    <span class="stage-count">0</span>
+                    <span class="stage-value">$0</span>
+                </div>
+                <div class="stage-content" data-stage-name="qualified">
+                    <!-- Deals will be added here -->
+                </div>
+            </div>
+
+            <div class="pipeline-stage" data-stage="proposal">
+                <div class="stage-header">
+                    <h2>Proposal</h2>
+                    <span class="stage-count">0</span>
+                    <span class="stage-value">$0</span>
+                </div>
+                <div class="stage-content" data-stage-name="proposal">
+                    <!-- Deals will be added here -->
+                </div>
+            </div>
+
+            <div class="pipeline-stage" data-stage="negotiation">
+                <div class="stage-header">
+                    <h2>Negotiation</h2>
+                    <span class="stage-count">0</span>
+                    <span class="stage-value">$0</span>
+                </div>
+                <div class="stage-content" data-stage-name="negotiation">
+                    <!-- Deals will be added here -->
+                </div>
+            </div>
+
+            <div class="pipeline-stage" data-stage="closed-won">
+                <div class="stage-header">
+                    <h2>Closed Won</h2>
+                    <span class="stage-count">0</span>
+                    <span class="stage-value">$0</span>
+                </div>
+                <div class="stage-content" data-stage-name="closed-won">
+                    <!-- Deals will be added here -->
+                </div>
+            </div>
+        </main>
+
+        <div class="action-buttons">
+            <button id="addDealBtn" class="btn btn-primary">+ Add New Deal</button>
+        </div>
+    </div>
+
+    <!-- Modal for adding new deals -->
+    <div id="dealModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Add New Deal</h2>
+            <form id="dealForm">
+                <div class="form-group">
+                    <label for="dealTitle">Deal Title:</label>
+                    <input type="text" id="dealTitle" required>
+                </div>
+                <div class="form-group">
+                    <label for="dealCompany">Company:</label>
+                    <input type="text" id="dealCompany" required>
+                </div>
+                <div class="form-group">
+                    <label for="dealValue">Deal Value ($):</label>
+                    <input type="number" id="dealValue" min="0" step="1000" required>
+                </div>
+                <div class="form-group">
+                    <label for="dealOwner">Owner:</label>
+                    <input type="text" id="dealOwner" required>
+                </div>
+                <div class="form-group">
+                    <label for="dealCloseDate">Expected Close Date:</label>
+                    <input type="date" id="dealCloseDate" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Create Deal</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="pipeline-app.js"></script>
+</body>
+</html>
