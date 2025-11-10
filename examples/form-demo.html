@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lead Capture Form Demo - SimpleCRM</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            padding: 40px;
+            max-width: 600px;
+            width: 90%;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .demo-note {
+            background: #f0f7ff;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .demo-note strong {
+            color: #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Contact Us</h1>
+        <p class="subtitle">Fill out the form below and we'll get back to you shortly.</p>
+        
+        <div class="demo-note">
+            <strong>Demo Mode:</strong> This form submits to a mock API endpoint. In production, configure the actual API endpoint.
+        </div>
+        
+        <div id="lead-form-container"></div>
+    </div>
+
+    <script type="module">
+        // Simple mock implementation for demo purposes
+        class LeadCaptureForm {
+            constructor(containerId, config) {
+                this.containerId = containerId;
+                this.config = {
+                    ...config,
+                    fields: config.fields || {},
+                    styling: config.styling || {}
+                };
+            }
+
+            render() {
+                const container = document.getElementById(this.containerId);
+                if (!container) {
+                    throw new Error(`Container ${this.containerId} not found`);
+                }
+
+                container.innerHTML = this.generateHTML();
+                this.attachEventListeners();
+            }
+
+            generateHTML() {
+                const primaryColor = this.config.styling?.primaryColor || '#007bff';
+                const buttonText = this.config.styling?.buttonText || 'Submit';
+                
+                return `
+                    <style>
+                        .lead-capture-form .form-group {
+                            margin-bottom: 15px;
+                        }
+                        .lead-capture-form label {
+                            display: block;
+                            margin-bottom: 5px;
+                            font-weight: 500;
+                            color: #333;
+                        }
+                        .lead-capture-form input,
+                        .lead-capture-form select,
+                        .lead-capture-form textarea {
+                            width: 100%;
+                            padding: 10px;
+                            border: 1px solid #ddd;
+                            border-radius: 4px;
+                            font-size: 14px;
+                            box-sizing: border-box;
+                        }
+                        .lead-capture-form textarea {
+                            min-height: 100px;
+                            resize: vertical;
+                        }
+                        .lead-capture-form button {
+                            background-color: ${primaryColor};
+                            color: white;
+                            padding: 12px 30px;
+                            border: none;
+                            border-radius: 4px;
+                            font-size: 16px;
+                            cursor: pointer;
+                            width: 100%;
+                        }
+                        .lead-capture-form button:hover {
+                            opacity: 0.9;
+                        }
+                        .lead-capture-form button:disabled {
+                            background-color: #ccc;
+                            cursor: not-allowed;
+                        }
+                        .lead-capture-form .success-message {
+                            background-color: #d4edda;
+                            color: #155724;
+                            padding: 15px;
+                            border-radius: 4px;
+                            margin-bottom: 15px;
+                        }
+                        .lead-capture-form .required::after {
+                            content: " *";
+                            color: #dc3545;
+                        }
+                    </style>
+                    
+                    <div class="lead-capture-form">
+                        <form id="lead-form">
+                            <div id="success-message" style="display: none;" class="success-message"></div>
+                            
+                            <div class="form-group">
+                                <label class="required" for="firstName">First Name</label>
+                                <input type="text" id="firstName" name="firstName" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="required" for="lastName">Last Name</label>
+                                <input type="text" id="lastName" name="lastName" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="required" for="email">Email</label>
+                                <input type="email" id="email" name="email" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="phone">Phone</label>
+                                <input type="tel" id="phone" name="phone">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="company">Company</label>
+                                <input type="text" id="company" name="company">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="productInterest">Product Interest</label>
+                                <input type="text" id="productInterest" name="productInterest" placeholder="e.g., Enterprise Solutions">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="geography">Location/Region</label>
+                                <input type="text" id="geography" name="geography" placeholder="e.g., California">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="message">Message</label>
+                                <textarea id="message" name="message" placeholder="Tell us about your needs..."></textarea>
+                            </div>
+                            
+                            <button type="submit" id="submit-btn">${buttonText}</button>
+                        </form>
+                    </div>
+                `;
+            }
+
+            attachEventListeners() {
+                const form = document.getElementById('lead-form');
+                if (!form) return;
+
+                form.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    await this.handleSubmit(form);
+                });
+            }
+
+            async handleSubmit(form) {
+                const submitBtn = document.getElementById('submit-btn');
+                const successMessage = document.getElementById('success-message');
+                
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Submitting...';
+
+                try {
+                    const formData = new FormData(form);
+                    const data = {
+                        firstName: formData.get('firstName'),
+                        lastName: formData.get('lastName'),
+                        email: formData.get('email'),
+                        phone: formData.get('phone'),
+                        company: formData.get('company'),
+                        productInterest: formData.get('productInterest'),
+                        geography: formData.get('geography'),
+                        message: formData.get('message')
+                    };
+
+                    // Mock API call - in production, this would be a real endpoint
+                    console.log('Lead captured:', data);
+                    
+                    // Simulate API delay
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    // Show success message
+                    if (successMessage) {
+                        successMessage.textContent = this.config.styling?.successMessage || 'Thank you! We will be in touch soon.';
+                        successMessage.style.display = 'block';
+                    }
+                    
+                    form.reset();
+                    
+                } catch (error) {
+                    alert('An error occurred. Please try again.');
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = this.config.styling?.buttonText || 'Submit';
+                }
+            }
+        }
+
+        // Initialize the form
+        const form = new LeadCaptureForm('lead-form-container', {
+            apiEndpoint: 'https://api.example.com/leads',
+            fields: {
+                showPhone: true,
+                showCompany: true,
+                showProductInterest: true,
+                showGeography: true,
+                showMessage: true
+            },
+            styling: {
+                primaryColor: '#667eea',
+                buttonText: 'Get Started',
+                successMessage: 'Thank you! We\'ll be in touch within 24 hours.'
+            }
+        });
+        
+        form.render();
+    </script>
+</body>
+</html>
