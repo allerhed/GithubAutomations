@@ -149,26 +149,4 @@ jobs:
             echo "✅ Completed analysis of $f"
           done < added.txt
 
-  # Belt-and-suspenders: auto-assign Copilot to any newly opened Issue
-  auto_assign_issue:
-    if: github.event_name == 'issues' && github.event.action == 'opened'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Assign copilot-swe-agent to Issue (if available)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Try to assign; if agent isn't available, this will no-op
-          gh issue edit "${{ github.event.issue.number }}" --add-assignee copilot-swe-agent || true
-
-  # Belt-and-suspenders: auto-assign Copilot to any newly opened PR
-  auto_assign_pr:
-    if: github.event_name == 'pull_request' && github.event.action == 'opened'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Assign copilot-swe-agent to PR (if available)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # PRs are issues under the hood
-          gh issue edit "${{ github.event.pull_request.number }}" --add-assignee copilot-swe-agent || true
+  
