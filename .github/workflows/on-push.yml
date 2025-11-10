@@ -126,6 +126,13 @@ jobs:
               if [ $CREATE_EXIT -eq 0 ]; then
                 echo "✅ Created issue: $ISSUE_URL"
                 
+                # Extract issue number from URL
+                ISSUE_NUMBER=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
+                
+                # Try to assign Copilot agent to the issue
+                echo "🤖 Assigning Copilot agent to issue #$ISSUE_NUMBER..."
+                gh issue edit "$ISSUE_NUMBER" --add-assignee copilot-swe-agent 2>/dev/null && echo "  ✅ Copilot agent assigned" || echo "  ⚠️ Could not assign Copilot agent (may not be available)"
+                
                 # Try to add labels one by one (ignore failures for non-existent labels)
                 if [ -n "$LABELS" ] && [ "$LABELS" != "null" ]; then
                   IFS=',' read -ra LABEL_ARRAY <<< "$LABELS"
