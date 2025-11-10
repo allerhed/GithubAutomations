@@ -34,3 +34,5 @@ See [PR Report Setup](docs/pr-report-setup.md) for configuration and usage instr
 
 - [API Rate Limits](docs/api/rate-limits.md)
 - [PR Report Setup](docs/pr-report-setup.md)
+- [Mobile Access Specification](docs/mobile-access-specification.md)
+- [Mobile Implementation Guide](docs/mobile-implementation-guide.md)

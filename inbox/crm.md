@@ -100,6 +100,11 @@ The goal of SimpleCRM is to create a user-friendly, sales-driven customer relati
 * Mobile app or mobile-optimised web access so sales team can use on the go. ([Pipedrive][3])
 * Same access to pipeline/deals/contacts/activities as desktop version.
 
+**📱 See detailed mobile implementation plans:**
+- [Mobile Access Specification](../docs/mobile-access-specification.md) - Complete mobile strategy and features
+- [Mobile Implementation Guide](../docs/mobile-implementation-guide.md) - Technical implementation details
+- [Mobile Access Checklist](../docs/mobile-access-checklist.md) - Implementation progress tracking
+
 ---
 
 ## **5. Non-Functional Requirements**
