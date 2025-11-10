@@ -3,6 +3,11 @@
  * Supports CSV and Excel-compatible formats
  */
 
+// Type declarations for environment-agnostic code
+declare const window: any;
+declare const document: any;
+declare const process: any;
+
 import { Deal, DashboardData, StageMetrics, ForecastData } from './models';
 
 export class ExportService {
@@ -145,20 +150,25 @@ export class ExportService {
 
   /**
    * Save export to file (Node.js environment)
+   * Note: This method requires fs and path modules in Node.js
    */
   async saveToFile(content: string, filename: string): Promise<void> {
     if (typeof window === 'undefined') {
-      // Node.js environment
-      const fs = await import('fs');
-      const path = await import('path');
-      
-      const outputDir = path.join(process.cwd(), 'exports');
-      if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir, { recursive: true });
-      }
+      // Node.js environment - use dynamic import with type assertion
+      try {
+        const fs: any = await import('fs' as any);
+        const path: any = await import('path' as any);
+        
+        const outputDir = path.join(process.cwd(), 'exports');
+        if (!fs.existsSync(outputDir)) {
+          fs.mkdirSync(outputDir, { recursive: true });
+        }
 
-      const filepath = path.join(outputDir, filename);
-      fs.writeFileSync(filepath, content, 'utf-8');
+        const filepath = path.join(outputDir, filename);
+        fs.writeFileSync(filepath, content, 'utf-8');
+      } catch (error) {
+        throw new Error('File system operations require Node.js environment');
+      }
     } else {
       // Browser environment - trigger download
       const blob = new Blob([content], { type: 'text/csv' });

@@ -3,6 +3,10 @@
  * Demonstrates how to use the dashboard and reporting features
  */
 
+// Type declarations for Node.js environment
+declare const require: any;
+declare const module: any;
+
 import { DashboardService, ExportService, Deal, PipelineStage } from '../src/crm';
 
 // Sample sales data
