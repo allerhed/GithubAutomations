@@ -1,0 +1,21 @@
+{
+  "defaultLimit": 60,
+  "burstLimit": 120,
+  "burstDuration": 10,
+  "keyOverrides": {
+    "example_key_id": {
+      "limit": 300,
+      "description": "Premium tier with higher limits"
+    }
+  },
+  "endpoints": {
+    "/api/v1/import": {
+      "limit": 30,
+      "description": "Lower limit for resource-intensive operations"
+    },
+    "/api/v1/export": {
+      "limit": 30,
+      "description": "Lower limit for resource-intensive operations"
+    }
+  }
+}

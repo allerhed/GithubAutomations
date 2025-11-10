@@ -1,0 +1,25 @@
+{
+  "name": "github-automations",
+  "version": "1.0.0",
+  "description": "Automation tools for managing GitHub issues and pull requests with CRM API integration support",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "github",
+    "automation",
+    "crm",
+    "api",
+    "integration"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
