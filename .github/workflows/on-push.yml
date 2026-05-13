@@ -39,7 +39,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Analyze inbox files with GitHub Models (Claude Sonnet) and create issues
+      # Analyze inbox files with GitHub Models (GPT-5) and create issues
       - name: Analyze inbox files and create issues
         if: steps.diff.outputs.count != '0'
         env:
@@ -64,7 +64,7 @@ jobs:
 
             # Call GitHub Models using gh-models extension
             set +e  # Temporarily disable exit on error
-            ISSUES_JSON=$(cat /tmp/file_content.txt | gh models run anthropic/claude-sonnet-4-20250514 --system-prompt "$SYSTEM_PROMPT" "$USER_PROMPT" 2>&1)
+            ISSUES_JSON=$(cat /tmp/file_content.txt | gh models run openai/gpt-5 --system-prompt "$SYSTEM_PROMPT" "$USER_PROMPT" 2>&1)
             EXIT_CODE=$?
             set -e  # Re-enable exit on error
             
