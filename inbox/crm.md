@@ -1,6 +1,6 @@
 # **SimpleCRM – Business Requirements Document (BRD)**
 
-*Version 2.0 | Prepared for Internal Use*
+*Version 2.1 | Prepared for Internal Use | Updated 2026-05-13*
 
 ## **1. Purpose**
 
